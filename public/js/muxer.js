@@ -1,72 +1,76 @@
 // public/js/muxer.js
 
 const MuxerModule = (() => {
-    // 1. Module scoped references for FFmpeg library and class instance
-    let FFmpegLib = null; 
-    let ffmpegInstance = null;
-    let loadPromise = null;
+  let FFmpegLib = null;
+  let ffmpegInstance = null;
+  let loadPromise = null;
 
-    // 2. SELF-HOSTED PATHS - Pointing to Step 1 files
-    const FFMPEG_LIB_LOCAL_URL = 'https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.10/+esm'; // The main ESM library
-    const FFMPEG_CORE_BASE_URL = 'https://app.unpkg.com/@ffmpeg/core@0.12.10/files/dist/umd/';       // Folder containing ffmpeg-core.js and .wasm
+  // --- USE CLOUDFLARE CDN ---
+  // Using jsdelivr CDN (backed by Cloudflare)
+  const FFMPEG_CDN_BASE = 'https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.10/dist/esm/';
+  const FFMPEG_LIB_URL = `${FFMPEG_CDN_BASE}ffmpeg.js`;
+  
+  // Core files from the same CDN
+  const CORE_BASE = 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/umd/';
+  const CORE_SCRIPT = `${CORE_BASE}ffmpeg-core.js`;
+  const WASM_BINARY = `${CORE_BASE}ffmpeg-core.wasm`;
+  const WORKER_SCRIPT = `${CORE_BASE}ffmpeg-core.worker.js`;
 
-    // 3. Robust initialization module (Fixed Turn 26 for strict self-hosting)
-    async function initFFmpegMuxer() {
-        if (ffmpegInstance) return ffmpegInstance;
-        if (loadPromise) return loadPromise;
+  // --- OR use unpkg (also Cloudflare backed) ---
+  // const FFMPEG_CDN_BASE = 'https://unpkg.com/@ffmpeg/ffmpeg@0.12.10/dist/esm/';
+  // const CORE_BASE = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd/';
 
-        showToast("Loading media processor... this requires a strong connection", "warning");
+  async function initFFmpegMuxer() {
+    if (ffmpegInstance) return ffmpegInstance;
+    if (loadPromise) return loadPromise;
 
-        loadPromise = (async () => {
-            try {
-                // --- Step A: Dynamically Import the library from LOCAL assets ---
-                if (!FFmpegLib) {
-                    FFmpegLib = await import(FFMPEG_LIB_LOCAL_URL);
-                    console.log("FFmpeg ESM Library imported successfully from local assets.");
-                }
+    showToast("Loading media processor from CDN...", "warning");
 
-                // --- Step B (Robust): Extract FFmpeg constructor from ESM ---
-                let FFmpegConstructor = null;
+    loadPromise = (async () => {
+      try {
+        // --- Import from CDN ---
+        if (!FFmpegLib) {
+          FFmpegLib = await import(FFMPEG_LIB_URL);
+          console.log("FFmpeg ESM Library loaded from CDN.");
+        }
 
-                if (FFmpegLib.FFmpeg && typeof FFmpegLib.FFmpeg === 'function') {
-                    // Standard named export
-                    FFmpegConstructor = FFmpegLib.FFmpeg;
-                } else if (FFmpegLib.default && typeof FFmpegLib.default === 'function') {
-                    // Modern esm.run bundling variant often has class as default export
-                    FFmpegConstructor = FFmpegLib.default;
-                }
+        // --- Extract constructor ---
+        let FFmpegConstructor = null;
+        if (FFmpegLib.FFmpeg && typeof FFmpegLib.FFmpeg === 'function') {
+          FFmpegConstructor = FFmpegLib.FFmpeg;
+        } else if (FFmpegLib.default && typeof FFmpegLib.default === 'function') {
+          FFmpegConstructor = FFmpegLib.default;
+        }
 
-                if (!FFmpegConstructor || typeof FFmpegConstructor !== 'function') {
-                    throw new Error("Muxer.js Error: Valid FFmpeg constructor not found in local ESM library.");
-                }
+        if (!FFmpegConstructor || typeof FFmpegConstructor !== 'function') {
+          throw new Error("Valid FFmpeg constructor not found in CDN library.");
+        }
 
-                // --- Step C: Instantiate and Load the Core explicitly using baseURL ---
-                showToast("Finalizing media component...", "warning");
-                
-                ffmpegInstance = new FFmpegConstructor();
-                
-                // standard v0.12 pattern: explicit core access via local secure baseURL
-                await ffmpegInstance.load({
-                    // Point explicitly to the local folder containing ffmpeg-core.js and .wasm
-                    baseURL: FFMPEG_CORE_BASE_URL 
-                });
-                
-                console.log("FFmpeg.wasm v0.12.10 (Local ESM) Muxer loaded successfully in isolated context.");
-                loadPromise = null;
-                return ffmpegInstance;
+        showToast("Initializing media processor...", "warning");
+        
+        ffmpegInstance = new FFmpegConstructor();
+        
+        // --- Load from CDN with explicit paths ---
+        await ffmpegInstance.load({
+          corePath: CORE_SCRIPT,
+          wasmPath: WASM_BINARY,
+          workerPath: WORKER_SCRIPT,
+        });
+        
+        console.log("FFmpeg.wasm loaded successfully from CDN.");
+        loadPromise = null;
+        return ffmpegInstance;
 
-            } catch (err) {
-                // Reset promise on failure to allow retry
-                loadPromise = null; 
-                console.error("FFmpeg ESM initialization failed:", err);
-                showToast(`Processor failure: ${err.message || 'Check files in assets/ffmpeg/'}`, "error");
-                throw err;
-            }
-        })();
+      } catch (err) {
+        loadPromise = null;
+        console.error("FFmpeg CDN initialization failed:", err);
+        showToast(`Processor load failed: ${err.message || 'Check console'}`, "error");
+        throw err;
+      }
+    })();
 
-        return loadPromise;
-    }
-
+    return loadPromise;
+  }
     // Main Muxing operation (remains unchanged from Turn 24)
     async function mergeStreamsToBlob(videoUrl, audioUrl, onProgress) {
         let fm = null;
