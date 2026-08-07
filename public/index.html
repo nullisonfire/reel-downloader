@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FinstaBook | Premium Reel Downloader</title>
+    <link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="css/animations.css">
+    <link rel="stylesheet" href="css/responsive.css">
+</head>
+<body>
+    <!-- Aurora & Particles Background -->
+    <div class="aurora-bg"></div>
+    <canvas id="particles-canvas"></canvas>
+
+    <main class="container">
+        <header>
+            <h1 class="gradient-text">FinstaBook</h1>
+            <p>Facebook & Instagram Video Downloader</p>
+        </header>
+
+        <section class="search-section glass-panel">
+            <div class="input-group">
+                <input type="text" id="url-input" placeholder="Paste Reel URL here..." autocomplete="off">
+                <button id="fetch-btn" class="ripple-btn">
+                    <span class="btn-text">Fetch Video</span>
+                    <div class="spinner hidden"></div>
+                </button>
+            </div>
+        </section>
+
+        <!-- Result Container -->
+        <section id="result-container" class="hidden">
+            <div class="result-card glass-panel tilt-element">
+                <div class="video-preview">
+                    <video id="preview-video" controls poster=""></video>
+                </div>
+                
+                <div class="media-details">
+                    <div class="author-info">
+                        <img id="author-pic" src="" alt="Author">
+                        <div class="author-text">
+                            <h3 id="author-name"></h3>
+                            <p id="author-username"></p>
+                        </div>
+                    </div>
+                    
+                    <p id="caption" class="caption-text"></p>
+                    
+                    <div class="stats">
+                        <div class="stat"><span id="like-count">0</span> Likes</div>
+                        <div class="stat"><span id="comment-count">0</span> Comments</div>
+                    </div>
+
+                    <div class="action-buttons">
+                        <button id="download-btn" class="ripple-btn primary-btn">Download MP4</button>
+                        <button id="copy-link-btn" class="ripple-btn secondary-btn">Copy Link</button>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <div id="toast-container"></div>
+
+    <!-- Scripts -->
+    <script src="js/toast.js"></script>
+    <script src="js/api.js"></script>
+    <script src="js/ui.js"></script>
+    <script src="js/ripple.js"></script>
+    <script src="js/particles.js"></script>
+    <script src="js/tilt.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>

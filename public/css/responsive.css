@@ -1,0 +1,13 @@
+@media (max-width: 768px) {
+    .result-card {
+        flex-direction: column;
+    }
+    
+    .input-group {
+        flex-direction: column;
+    }
+    
+    .gradient-text {
+        font-size: 2.2rem;
+    }
+}

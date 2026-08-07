@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120">
+  <defs>
+    <linearGradient id="bg-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ff007f" />
+      <stop offset="100%" stop-color="#7928ca" />
+    </linearGradient>
+    <filter id="shadow">
+      <feDropShadow dx="0" dy="4" stdDeviation="4" flood-color="#000000" flood-opacity="0.3"/>
+    </filter>
+  </defs>
+  
+  <!-- Gradient Background -->
+  <rect width="120" height="120" rx="30" fill="url(#bg-grad)" />
+  
+  <!-- Download Arrow & Bar -->
+  <g filter="url(#shadow)">
+    <path d="M60 30 L60 75" stroke="white" stroke-width="10" stroke-linecap="round" />
+    <path d="M40 55 L60 75 L80 55" stroke="white" stroke-width="10" stroke-linecap="round" stroke-linejoin="round" fill="none" />
+    <path d="M35 90 L85 90" stroke="white" stroke-width="10" stroke-linecap="round" />
+  </g>
+</svg>
