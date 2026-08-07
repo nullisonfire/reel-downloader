@@ -6,11 +6,11 @@ const MuxerModule = (() => {
     let ffmpegInstance = null;
     let loadPromise = null;
 
-    // 2. Optimized multi-threaded FFmpeg Core from standard CDN
-    const FFMPEG_BASE_URL = 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.10/dist/umd';
-    const FFMPEG_LIBRARY_URL = 'https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.15/dist/umd/ffmpeg.min.js';
+    // 2. SELF-HOSTED PATHS - Pointing to Step 1 files
+    const FFMPEG_LIB_LOCAL_URL = '/assets/ffmpeg/ffmpeg.js'; // The main ESM library
+    const FFMPEG_CORE_BASE_URL = '/assets/ffmpeg/';       // Folder containing ffmpeg-core.js and .wasm
 
-    // 3. Robust initialization module (Fixed for Cross-Origin Isolation Security)
+    // 3. Robust initialization module (Fixed Turn 26 for strict self-hosting)
     async function initFFmpegMuxer() {
         if (ffmpegInstance) return ffmpegInstance;
         if (loadPromise) return loadPromise;
@@ -19,35 +19,39 @@ const MuxerModule = (() => {
 
         loadPromise = (async () => {
             try {
-                // --- Step A: Dynamically Import the modern ESM library ---
-                // We are not relying on a global window.FFmpegWASM anymore.
+                // --- Step A: Dynamically Import the library from LOCAL assets ---
                 if (!FFmpegLib) {
-                    FFmpegLib = await import(FFMPEG_LIBRARY_URL);
-                    console.log("FFmpeg ESM Library imported successfully.");
+                    FFmpegLib = await import(FFMPEG_LIB_LOCAL_URL);
+                    console.log("FFmpeg ESM Library imported successfully from local assets.");
                 }
 
-                const { FFmpeg } = FFmpegLib;
+                // --- Step B (Robust): Extract FFmpeg constructor from ESM ---
+                let FFmpegConstructor = null;
 
-                // --- Step B: Programmatically Convert dependencies to Blob URLs ---
-                // This bypasses the browser's dynamic script blocking inside an isolated worker context.
-                showToast("Securing media component... (1/2)", "warning");
-                const [coreURL, wasmURL, workerURL] = await Promise.all([
-                    toBlobURL(`${FFMPEG_BASE_URL}/ffmpeg-core.js`, 'text/javascript'),
-                    toBlobURL(`${FFMPEG_BASE_URL}/ffmpeg-core.wasm`, 'application/wasm'),
-                    toBlobURL(`https://cdnjs.cloudflare.com/ajax/libs/ffmpeg-core/0.8.5/ffmpeg-core.worker.js`, 'text/javascript'),
-                ]);
+                if (FFmpegLib.FFmpeg && typeof FFmpegLib.FFmpeg === 'function') {
+                    // Standard named export
+                    FFmpegConstructor = FFmpegLib.FFmpeg;
+                } else if (FFmpegLib.default && typeof FFmpegLib.default === 'function') {
+                    // Modern esm.run bundling variant often has class as default export
+                    FFmpegConstructor = FFmpegLib.default;
+                }
 
-                // --- Step C: Load the optimized WASM Core explicitly providing URLs ---
-                showToast("Finalizing components... (2/2)", "warning");
-                ffmpegInstance = new FFmpeg();
+                if (!FFmpegConstructor || typeof FFmpegConstructor !== 'function') {
+                    throw new Error("Muxer.js Error: Valid FFmpeg constructor not found in local ESM library.");
+                }
+
+                // --- Step C: Instantiate and Load the Core explicitly using baseURL ---
+                showToast("Finalizing media component...", "warning");
                 
+                ffmpegInstance = new FFmpegConstructor();
+                
+                // standard v0.12 pattern: explicit core access via local secure baseURL
                 await ffmpegInstance.load({
-                    corePath: coreURL,
-                    wasmPath: wasmURL,
-                    workerPath: workerURL,
+                    // Point explicitly to the local folder containing ffmpeg-core.js and .wasm
+                    baseURL: FFMPEG_CORE_BASE_URL 
                 });
                 
-                console.log("FFmpeg.wasm v0.12 (ESM) Muxer loaded successfully in isolated context.");
+                console.log("FFmpeg.wasm v0.12.10 (Local ESM) Muxer loaded successfully in isolated context.");
                 loadPromise = null;
                 return ffmpegInstance;
 
@@ -55,7 +59,7 @@ const MuxerModule = (() => {
                 // Reset promise on failure to allow retry
                 loadPromise = null; 
                 console.error("FFmpeg ESM initialization failed:", err);
-                showToast(`Processor failure: ${err.message || 'Check connection'}`, "error");
+                showToast(`Processor failure: ${err.message || 'Check files in assets/ffmpeg/'}`, "error");
                 throw err;
             }
         })();
@@ -63,7 +67,7 @@ const MuxerModule = (() => {
         return loadPromise;
     }
 
-    // Main Muxing operation
+    // Main Muxing operation (remains unchanged from Turn 24)
     async function mergeStreamsToBlob(videoUrl, audioUrl, onProgress) {
         let fm = null;
 
@@ -88,7 +92,7 @@ const MuxerModule = (() => {
             // --- Step 3: Execute FFmpeg Muxing Command ---
             showToast("Muxing in browser... (2/3)", "warning");
             
-            // -c copy VITAL performance hook. Just copy encoded packets, do NOT re-encode. Extemely fast.
+            // -c copy VITAL performance hook. Just copy packets, do NOT re-encode. Extremely fast.
             const command = ['-i', 'input_video.mp4', '-i', 'input_audio.mp4', '-c', 'copy', 'output_merged.mp4'];
             await fm.exec(command);
 
@@ -111,14 +115,6 @@ const MuxerModule = (() => {
             UIRenderer.setProcessingOverlay(false);
             if(fm && typeof fm.on === 'function') { fm.on('progress', null); }
         }
-    }
-
-    // 4. Utility: Convert any URL into a temporary secure Blob URL (VITAL for Isolation)
-    async function toBlobURL(url, mimeType) {
-        const response = await fetch(url);
-        const buffer = await response.arrayBuffer();
-        const blob = new Blob([buffer], { type: mimeType });
-        return URL.createObjectURL(blob);
     }
 
     return { mergeStreamsToBlob };
