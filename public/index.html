@@ -3,26 +3,36 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>FinstaBook | Premium Reel Downloader</title>
-    <link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
+    <title>Finstabook | Premium Reel Downloader</title>
+    
     <link rel="stylesheet" href="css/style.css">
     <link rel="stylesheet" href="css/animations.css">
     <link rel="stylesheet" href="css/responsive.css">
+    <link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
 </head>
 <body>
     <!-- Aurora & Particles Background -->
     <div class="aurora-bg"></div>
     <canvas id="particles-canvas"></canvas>
 
+    <!-- Processing Overlay (New) -->
+    <div id="processing-overlay" class="hidden">
+        <div class="overlay-content">
+            <div class="spinner large"></div>
+            <h2 class="gradient-text">Processing Media</h2>
+            <p>Merging separate video and audio streams... This might take a few seconds based on file size and browser speed.</p>
+        </div>
+    </div>
+
     <main class="container">
         <header>
-            <h1 class="gradient-text">FinstaBook</h1>
+            <h1 class="gradient-text">Finstabook</h1>
             <p>Facebook & Instagram Video Downloader</p>
         </header>
 
         <section class="search-section glass-panel">
             <div class="input-group">
-                <input type="text" id="url-input" placeholder="Paste Reel URL here..." autocomplete="off">
+                <input type="text" id="url-input" placeholder="Paste Reel or Video URL here..." autocomplete="off">
                 <button id="fetch-btn" class="ripple-btn">
                     <span class="btn-text">Fetch Video</span>
                     <div class="spinner hidden"></div>
@@ -31,10 +41,13 @@
         </section>
 
         <!-- Result Container -->
-        <section id="result-container" class="hidden">
+        <section id="result-container" class="hidden fade-in">
             <div class="result-card glass-panel tilt-element">
                 <div class="video-preview">
-                    <video id="preview-video" controls poster=""></video>
+                    <!-- Standard placeholder poster -->
+                    <video id="preview-video" controls poster="assets/favicon.svg"></video>
+                    <!-- HIDDEN Synced Audio Element (New) -->
+                    <audio id="synced-audio"></audio>
                 </div>
                 
                 <div class="media-details">
@@ -50,15 +63,17 @@
                     
                     <div class="stats">
                         <div class="stat"><span id="like-count">0</span> Likes</div>
-                        <div class="stat"><span id="comment-count">0</span> Comments</div>
+                        <div class="stat"><span id="comment-count">0</span> views</div>
                     </div>
 
-                    <!-- public/index.html (Updated action-buttons div) -->
-                    <div class="action-buttons" style="display: flex; flex-direction: column; gap: 0.5rem;">
+                    <!-- Updated action-buttons container (New style for column layout) -->
+                    <div class="action-buttons-container">
+                        <!-- Standard copy btn -->
+                        <button id="copy-link-btn" class="ripple-btn secondary-btn" style="margin-bottom: 0.5rem;">Copy Main Link</button>
+                        <!-- Title for dynamic section -->
+                        <h4 style="color: var(--text-secondary); margin-bottom: 0.5rem; font-size: 0.9rem;">Available Qualities:</h4>
                         <!-- Container where dynamic download buttons will be inserted -->
-                        <div id="download-buttons-container" style="display: flex; gap: 1rem; flex-wrap: wrap;"></div>
-                        
-                        <button id="copy-link-btn" class="ripple-btn secondary-btn" style="width: 100%;">Copy Link</button>
+                        <div id="download-buttons-container" style="display: flex; gap: 0.5rem; flex-wrap: wrap;"></div>
                     </div>
                 </div>
             </div>
@@ -67,13 +82,12 @@
 
     <div id="toast-container"></div>
 
-    <!-- Scripts -->
-    <script src="js/toast.js"></script>
-    <script src="js/api.js"></script>
-    <script src="js/ui.js"></script>
-    <script src="js/ripple.js"></script>
-    <script src="js/particles.js"></script>
-    <script src="js/tilt.js"></script>
+    <!-- External FFmpeg script -->
+    <script src="https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.10/dist/umd/ffmpeg.min.js"></script>
+
+    <!-- Consolidated/Merged Scripts (Requested modification) -->
+    <script src="js/effects_and_ui.js"></script>
+    <script src="js/muxer.js"></script>
     <script src="js/app.js"></script>
 </body>
 </html>
