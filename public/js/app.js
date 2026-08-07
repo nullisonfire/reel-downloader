@@ -8,8 +8,39 @@ document.addEventListener('DOMContentLoaded', () => {
     fetchBtn.addEventListener('click', async () => {
         const url = urlInput.value.trim();
         
-        if (!url || !url.includes('instagram.com')) {
-            showToast('Please enter a valid Instagram URL', 'error');
+        // if (!url || !url.includes('instagram.com')) {
+        //     showToast('Please enter a valid Instagram URL', 'error');
+        //     return;
+        // }
+
+        let hostname = '';
+        
+        try {
+            hostname = new URL(url).hostname.toLowerCase();
+        } catch {
+            showToast('Please enter a valid Instagram or Facebook URL', 'error');
+            return;
+        }
+        
+        const allowedHosts = [
+            'instagram.com',
+            'www.instagram.com',
+            'm.instagram.com',
+            'facebook.com',
+            'www.facebook.com',
+            'm.facebook.com',
+            'fb.watch',
+            'www.fb.watch',
+            'fb.com',
+            'www.fb.com'
+        ];
+        
+        const isSupported = allowedHosts.some(host =>
+            hostname === host || hostname.endsWith(`.${host}`)
+        );
+        
+        if (!isSupported) {
+            showToast('Please enter a valid Instagram or Facebook URL', 'error');
             return;
         }
 
