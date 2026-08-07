@@ -8,7 +8,7 @@ const MuxerModule = (() => {
 
     // 2. Optimized multi-threaded FFmpeg Core from standard CDN
     const FFMPEG_BASE_URL = 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.10/dist/umd';
-    const FFMPEG_LIBRARY_URL = 'https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.10/dist/esm/ffmpeg.js';
+    const FFMPEG_LIBRARY_URL = 'https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.15/dist/umd/ffmpeg.min.js';
 
     // 3. Robust initialization module (Fixed for Cross-Origin Isolation Security)
     async function initFFmpegMuxer() {
