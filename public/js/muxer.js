@@ -6,7 +6,7 @@ const MuxerModule = (() => {
     let loadPromise = null;
 
     // FFmpeg is heavy. Use JSDelivr's optimized multi-threaded version
-    // NOTE: This REQUIRES Cross-Origin Isolation (Step 1) to load.
+    // NOTE: This REQUIRES Cross-Origin Isolation (public/_headers) to load.
     async function loadFFmpeg() {
         if (isLoaded) return ffmpeg;
         if (loadPromise) return loadPromise;
@@ -14,7 +14,12 @@ const MuxerModule = (() => {
         showToast("Initial FFmpeg load... please wait", "warning");
         
         loadPromise = (async () => {
-            const { FFmpeg } = window.FFmpeg;
+            // FIX 1: Access modern UMD global 'window.FFmpegWasm' instead of 'window.FFmpeg'
+            if (!window.FFmpegWasm) {
+                throw new Error("FFmpeg script from CDN failed to initialize or is blocked.");
+            }
+            const { FFmpeg } = window.FFmpegWasm;
+
             const corePath = 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.10/dist/umd/ffmpeg-core.js';
             const wasmPath = 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.10/dist/umd/ffmpeg-core.wasm';
             const workerPath = 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.10/dist/umd/ffmpeg-core.worker.js';
@@ -38,8 +43,11 @@ const MuxerModule = (() => {
 
     // Main Muxing operation
     async function mergeStreamsToBlob(videoUrl, audioUrl, onProgress) {
+        // FIX 2: Declare let outside try for scoping access in finally
+        let fm = null;
+
         try {
-            const fm = await loadFFmpeg();
+            fm = await loadFFmpeg(); // assign to outer scope
             
             if (typeof onProgress === 'function') fm.on('progress', onProgress);
 
@@ -53,18 +61,14 @@ const MuxerModule = (() => {
             ]);
 
             // --- Step 2: Write buffers to FFmpeg's virtual filesystem (MEMFS) ---
-            // FFmpeg command syntax can only read from "files" in its own memory
-            fm.writeFile('input_video.mp4', new Uint8Array(videoBuffer));
-            fm.writeFile('input_audio.mp4', new Uint8Array(audioBuffer));
+            await fm.writeFile('input_video.mp4', new Uint8Array(videoBuffer));
+            await fm.writeFile('input_audio.mp4', new Uint8Array(audioBuffer));
 
             // --- Step 3: Execute FFmpeg Muxing Command ---
             showToast("Muxing in browser... (2/3)", "warning");
             
-            // Standard Muxing command:
-            // -i: Input files
-            // -c copy: VITAL performance hook. Just copy encoded packets, do NOT re-encode. Extremely fast once files download.
+            // -c copy VITAL performance hook. Just copy packets, do NOT re-encode.
             const command = ['-i', 'input_video.mp4', '-i', 'input_audio.mp4', '-c', 'copy', 'output_merged.mp4'];
-            
             await fm.exec(command);
 
             // --- Step 4: Read output back from MEMFS as a download blob ---
@@ -72,9 +76,9 @@ const MuxerModule = (() => {
             const outputData = await fm.readFile('output_merged.mp4');
 
             // Cleanup MEMFS to save memory
-            fm.deleteFile('input_video.mp4');
-            fm.deleteFile('input_audio.mp4');
-            fm.deleteFile('output_merged.mp4');
+            await fm.deleteFile('input_video.mp4');
+            await fm.deleteFile('input_audio.mp4');
+            await fm.deleteFile('output_merged.mp4');
 
             return new Blob([outputData.buffer], { type: 'video/mp4' });
 
@@ -84,11 +88,12 @@ const MuxerModule = (() => {
             return null;
         } finally {
             UIRenderer.setProcessingOverlay(false);
-            // Remove progress listener for future runs
-            if(fm) fm.on('progress', null);
+            // Robust cleanup (checking fm exists before unhooking listener)
+            if(fm && typeof fm.on === 'function') {
+                 fm.on('progress', null);
+            }
         }
     }
 
-    // Expose core function globally
     return { mergeStreamsToBlob };
 })();
