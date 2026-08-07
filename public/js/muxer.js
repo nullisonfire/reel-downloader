@@ -4,75 +4,81 @@ const MuxerModule = (() => {
   let FFmpegLib = null;
   let ffmpegInstance = null;
   let loadPromise = null;
+  let currentCDN = null;
 
-  // --- CDN Configuration with Multiple Fallbacks ---
-  // Additional CDN providers for even more redundancy
+  // --- CORRECT CDN CONFIGURATION ---
+  // The core files are actually inside the @ffmpeg/core package
+  // and may need specific version paths
   const CDN_PROVIDERS = [
     {
-      name: 'jsdelivr',
+      name: 'jsdelivr-esm',
+      // ESM version of ffmpeg
       base: 'https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.10/dist/esm/',
+      // Core files - note the different path structure
       core: 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/umd/'
     },
     {
-      name: 'unpkg',
+      name: 'unpkg-esm',
       base: 'https://unpkg.com/@ffmpeg/ffmpeg@0.12.10/dist/esm/',
       core: 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd/'
     },
     {
-      name: 'esm',
-      base: 'https://esm.sh/@ffmpeg/ffmpeg@0.12.10/',
-      core: 'https://esm.sh/@ffmpeg/core@0.12.6/'
-    },
-    {
-      name: 'skypack',
-      base: 'https://cdn.skypack.dev/@ffmpeg/ffmpeg@0.12.10/',
-      core: 'https://cdn.skypack.dev/@ffmpeg/core@0.12.6/'
-    },
-    {
-      name: 'cloudflare',
+      name: 'cdnjs',
+      // cdnjs might have different version numbering
       base: 'https://cdnjs.cloudflare.com/ajax/libs/ffmpeg.js/0.12.10/',
       core: 'https://cdnjs.cloudflare.com/ajax/libs/ffmpeg-core/0.12.6/'
-    },
-    {
-      name: 'fastly',
-      base: 'https://fastly.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.10/dist/esm/',
-      core: 'https://fastly.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/umd/'
     }
   ];
 
-  // --- Alternative: Using esm.sh CDN (also Cloudflare powered) ---
-  // {
-  //   name: 'esm',
-  //   base: 'https://esm.sh/@ffmpeg/ffmpeg@0.12.10/',
-  //   core: 'https://esm.sh/@ffmpeg/core@0.12.6/'
-  // }
+  // --- ALTERNATIVE: Use single CDN with correct paths ---
+  // Actually, the most reliable is to use the official CDN for wasm files
+  const WASM_CDN = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd/';
 
-  // --- Helper: Fetch with timeout and retry ---
-  async function fetchWithTimeout(url, timeout = 15000) {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), timeout);
-    
+  // --- Helper: Test if a file exists (HEAD request) ---
+  async function testFileExists(url, timeout = 5000) {
     try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), timeout);
+      
       const response = await fetch(url, { 
+        method: 'HEAD',
         signal: controller.signal,
         mode: 'cors',
         credentials: 'omit'
       });
       clearTimeout(timeoutId);
-      if (!response.ok) throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      return response;
+      return response.ok;
     } catch (error) {
-      clearTimeout(timeoutId);
-      throw error;
+      return false;
     }
   }
 
-  // --- Helper: Test CDN availability ---
+  // --- Helper: Test CDN by checking core files ---
   async function testCDNAvailability(provider) {
     try {
-      // Test with a small file (worker.js is usually smaller)
-      const testUrl = `${provider.core}ffmpeg-core.worker.js`;
-      await fetchWithTimeout(testUrl, 5000);
+      // Check if the main library file exists
+      const libUrl = `${provider.base}ffmpeg.js`;
+      const libExists = await testFileExists(libUrl);
+      
+      if (!libExists) {
+        console.warn(`CDN ${provider.name}: Library file not found`);
+        return false;
+      }
+
+      // Check core files (at least one)
+      const coreFiles = [
+        `${provider.core}ffmpeg-core.js`,
+        `${provider.core}ffmpeg-core.wasm`
+      ];
+
+      for (const file of coreFiles) {
+        const exists = await testFileExists(file);
+        if (!exists) {
+          console.warn(`CDN ${provider.name}: Core file not found: ${file}`);
+          return false;
+        }
+      }
+
       return true;
     } catch (error) {
       console.warn(`CDN ${provider.name} unavailable:`, error.message);
@@ -80,26 +86,50 @@ const MuxerModule = (() => {
     }
   }
 
-  // --- Helper: Find working CDN ---
+  // --- Find working CDN ---
   async function findWorkingCDN() {
-    // Shuffle providers for load balancing (optional)
-    const providers = [...CDN_PROVIDERS];
-    // Randomize order to distribute load
-    // providers.sort(() => Math.random() - 0.5);
-    
-    for (const provider of providers) {
+    // Try providers in order
+    for (const provider of CDN_PROVIDERS) {
       console.log(`Testing CDN: ${provider.name}...`);
       const isAvailable = await testCDNAvailability(provider);
       if (isAvailable) {
         console.log(`✅ Using CDN: ${provider.name}`);
+        currentCDN = provider;
         return provider;
       }
     }
     
+    // If all CDNs fail, throw error
     throw new Error('All CDN providers failed. Please check your internet connection.');
   }
 
-  // --- Main initialization with fallback ---
+  // --- Dynamic import with fallback ---
+  async function loadFFmpegFromCDN(provider) {
+    try {
+      // Try to import from CDN
+      const libUrl = `${provider.base}ffmpeg.js`;
+      console.log(`Loading from: ${libUrl}`);
+      
+      // Use import with cache busting
+      return await import(/* @vite-ignore */ `${libUrl}?v=${Date.now()}`);
+    } catch (error) {
+      console.error(`Failed to load from ${provider.name}:`, error);
+      
+      // Try alternative path for cdnjs
+      if (provider.name === 'cdnjs') {
+        try {
+          const altUrl = `${provider.base}ffmpeg.min.js`;
+          return await import(/* @vite-ignore */ `${altUrl}?v=${Date.now()}`);
+        } catch (altError) {
+          console.error('Alternative path also failed:', altError);
+          throw altError;
+        }
+      }
+      throw error;
+    }
+  }
+
+  // --- Main initialization ---
   async function initFFmpegMuxer() {
     if (ffmpegInstance) return ffmpegInstance;
     if (loadPromise) return loadPromise;
@@ -107,89 +137,68 @@ const MuxerModule = (() => {
     showToast("Loading media processor from CDN...", "warning");
 
     loadPromise = (async () => {
-      let lastError = null;
-      let workingProvider = null;
-
+      let provider = null;
+      
       try {
-        // --- Step 1: Find a working CDN ---
-        workingProvider = await findWorkingCDN();
+        // Find working CDN
+        provider = await findWorkingCDN();
         
-        // --- Step 2: Try to load FFmpeg from working CDN ---
+        // Load FFmpeg library
         if (!FFmpegLib) {
-          const libUrl = `${workingProvider.base}ffmpeg.js`;
-          console.log(`Loading FFmpeg from: ${libUrl}`);
-          
-          try {
-            // Use dynamic import with cache busting
-            FFmpegLib = await import(/* @vite-ignore */ `${libUrl}?t=${Date.now()}`);
-            console.log(`✅ FFmpeg ESM loaded from ${workingProvider.name}`);
-          } catch (importError) {
-            console.error(`Failed to import from ${workingProvider.name}:`, importError);
-            
-            // Try alternative import method for some CDNs
-            if (workingProvider.name === 'cloudflare') {
-              // Cloudflare cdnjs might use different structure
-              FFmpegLib = await import(/* @vite-ignore */ `${workingProvider.base}ffmpeg.min.js?t=${Date.now()}`);
-            } else {
-              throw importError;
-            }
-          }
+          FFmpegLib = await loadFFmpegFromCDN(provider);
+          console.log(`✅ FFmpeg ESM loaded from ${provider.name}`);
         }
 
-        // --- Step 3: Extract constructor (with multiple fallback checks) ---
+        // Extract constructor
         let FFmpegConstructor = null;
         
-        // Try different export patterns
         if (FFmpegLib.FFmpeg && typeof FFmpegLib.FFmpeg === 'function') {
           FFmpegConstructor = FFmpegLib.FFmpeg;
         } else if (FFmpegLib.default && typeof FFmpegLib.default === 'function') {
           FFmpegConstructor = FFmpegLib.default;
-        } else if (FFmpegLib.default && FFmpegLib.default.FFmpeg && typeof FFmpegLib.default.FFmpeg === 'function') {
+        } else if (FFmpegLib.default?.FFmpeg && typeof FFmpegLib.default.FFmpeg === 'function') {
           FFmpegConstructor = FFmpegLib.default.FFmpeg;
         }
 
-        if (!FFmpegConstructor || typeof FFmpegConstructor !== 'function') {
-          throw new Error(`Valid FFmpeg constructor not found in ${workingProvider.name} library.`);
+        if (!FFmpegConstructor) {
+          throw new Error('FFmpeg constructor not found');
         }
 
-        // --- Step 4: Create instance ---
+        // Create instance
         showToast("Initializing media processor...", "warning");
         ffmpegInstance = new FFmpegConstructor();
 
-        // --- Step 5: Load with core files from same CDN ---
-        const corePaths = {
-          corePath: `${workingProvider.core}ffmpeg-core.js`,
-          wasmPath: `${workingProvider.core}ffmpeg-core.wasm`,
-          workerPath: `${workingProvider.core}ffmpeg-core.worker.js`
-        };
-
-        console.log(`Loading core files from: ${workingProvider.core}`);
+        // Load core files
+        const corePath = provider.core;
         
-        // Try loading with different options based on CDN
+        // Try loading with explicit paths
         try {
-          await ffmpegInstance.load(corePaths);
-        } catch (loadError) {
-          console.warn(`Standard load failed, trying alternative options...`, loadError);
-          
-          // Alternative: Try with just corePath (some versions auto-detect)
           await ffmpegInstance.load({
-            corePath: corePaths.corePath
+            corePath: `${corePath}ffmpeg-core.js`,
+            wasmPath: `${corePath}ffmpeg-core.wasm`,
+            workerPath: `${corePath}ffmpeg-core.worker.js`
+          });
+        } catch (loadError) {
+          console.warn('Standard load failed, trying simplified load...', loadError);
+          
+          // Some versions work with just corePath
+          await ffmpegInstance.load({
+            corePath: corePath
           });
         }
 
-        console.log(`✅ FFmpeg.wasm fully loaded from ${workingProvider.name} CDN`);
+        console.log(`✅ FFmpeg.wasm fully loaded from ${provider.name}`);
         showToast("Media processor ready!", "success");
         loadPromise = null;
         return ffmpegInstance;
 
       } catch (err) {
         loadPromise = null;
-        console.error("FFmpeg initialization failed:", err);
+        console.error('FFmpeg initialization failed:', err);
         
-        // Show detailed error with CDN info
-        const cdnName = workingProvider ? workingProvider.name : 'unknown';
+        const cdnName = provider?.name || 'unknown';
         showToast(
-          `Processor load failed (${cdnName}): ${err.message || 'Check console'}`,
+          `Processor load failed: ${err.message || 'Unknown error'}`,
           "error"
         );
         throw err;
@@ -199,7 +208,45 @@ const MuxerModule = (() => {
     return loadPromise;
   }
 
-  // --- Main Muxing function with retry logic ---
+  // --- Fallback: Try to load from local assets if CDN fails ---
+  async function initFFmpegWithFallback() {
+    try {
+      // Try CDN first
+      return await initFFmpegMuxer();
+    } catch (cdnError) {
+      console.warn('CDN failed, trying local assets...', cdnError);
+      
+      try {
+        // Try local assets as fallback
+        showToast("CDN unavailable, trying local...", "warning");
+        
+        const LOCAL_BASE = '/assets/ffmpeg/';
+        FFmpegLib = await import(/* @vite-ignore */ `${LOCAL_BASE}ffmpeg.js`);
+        
+        let FFmpegConstructor = FFmpegLib.FFmpeg || FFmpegLib.default;
+        if (!FFmpegConstructor) {
+          throw new Error('Local FFmpeg constructor not found');
+        }
+        
+        ffmpegInstance = new FFmpegConstructor();
+        await ffmpegInstance.load({
+          corePath: `${LOCAL_BASE}ffmpeg-core.js`,
+          wasmPath: `${LOCAL_BASE}ffmpeg-core.wasm`,
+          workerPath: `${LOCAL_BASE}ffmpeg-core.worker.js`
+        });
+        
+        showToast("Media processor loaded locally!", "success");
+        return ffmpegInstance;
+        
+      } catch (localError) {
+        console.error('Local fallback also failed:', localError);
+        showToast("Unable to load media processor", "error");
+        throw new Error('Both CDN and local sources failed');
+      }
+    }
+  }
+
+  // --- Main muxing function with retry ---
   async function mergeStreamsToBlob(videoUrl, audioUrl, onProgress) {
     let fm = null;
     let retryCount = 0;
@@ -207,17 +254,16 @@ const MuxerModule = (() => {
 
     while (retryCount <= maxRetries) {
       try {
-        // If retrying, reset instance
         if (retryCount > 0) {
           console.log(`Retry attempt ${retryCount}/${maxRetries}`);
           ffmpegInstance = null;
           FFmpegLib = null;
           loadPromise = null;
-          // Random delay before retry
           await new Promise(resolve => setTimeout(resolve, 1000 * retryCount));
         }
 
-        fm = await initFFmpegMuxer();
+        // Use fallback initialization
+        fm = await initFFmpegWithFallback();
         
         if (typeof onProgress === 'function') {
           fm.on('progress', onProgress);
@@ -225,42 +271,48 @@ const MuxerModule = (() => {
 
         UIRenderer.setProcessingOverlay(true);
 
-        showToast("Fetching streams... (1/3)", "warning");
+        showToast("Fetching streams...", "warning");
         
-        // Fetch with timeout
-        const fetchPromises = [
-          fetchWithTimeout(videoUrl, 30000),
-          fetchWithTimeout(audioUrl, 30000)
-        ];
+        // Fetch streams with timeout
+        const fetchWithTimeout = (url, timeout = 30000) => {
+          return new Promise((resolve, reject) => {
+            const timer = setTimeout(() => reject(new Error('Fetch timeout')), timeout);
+            fetch(url)
+              .then(response => {
+                clearTimeout(timer);
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                resolve(response);
+              })
+              .catch(err => {
+                clearTimeout(timer);
+                reject(err);
+              });
+          });
+        };
 
-        const [videoResponse, audioResponse] = await Promise.all(fetchPromises);
+        const [videoResponse, audioResponse] = await Promise.all([
+          fetchWithTimeout(videoUrl),
+          fetchWithTimeout(audioUrl)
+        ]);
+
         const [videoBuffer, audioBuffer] = await Promise.all([
           videoResponse.arrayBuffer(),
           audioResponse.arrayBuffer()
         ]);
 
-        // --- Write to virtual filesystem ---
+        // Write files
         await fm.writeFile('input_video.mp4', new Uint8Array(videoBuffer));
         await fm.writeFile('input_audio.mp4', new Uint8Array(audioBuffer));
 
-        // --- Execute muxing ---
-        showToast("Muxing streams... (2/3)", "warning");
-        
-        // Add progress reporting for the muxing process
-        const progressInterval = setInterval(() => {
-          if (typeof onProgress === 'function') {
-            onProgress({ ratio: 0.5 }); // Fake progress during muxing
-          }
-        }, 500);
-
+        // Mux
+        showToast("Muxing streams...", "warning");
         await fm.exec(['-i', 'input_video.mp4', '-i', 'input_audio.mp4', '-c', 'copy', 'output_merged.mp4']);
-        clearInterval(progressInterval);
 
-        // --- Read output ---
-        showToast("Finalizing... (3/3)", "warning");
+        // Read output
+        showToast("Finalizing...", "warning");
         const outputData = await fm.readFile('output_merged.mp4');
 
-        // --- Cleanup ---
+        // Cleanup
         await fm.deleteFile('input_video.mp4');
         await fm.deleteFile('input_audio.mp4');
         await fm.deleteFile('output_merged.mp4');
@@ -269,25 +321,20 @@ const MuxerModule = (() => {
         return new Blob([outputData.buffer], { type: 'video/mp4' });
 
       } catch (error) {
-        console.error(`Muxing attempt ${retryCount + 1} failed:`, error);
+        console.error(`Attempt ${retryCount + 1} failed:`, error);
         
         if (retryCount === maxRetries) {
-          // All retries failed
           showToast(`Muxing failed: ${error.message || 'Unknown error'}`, "error");
           return null;
         }
         
-        // Prepare for retry
         retryCount++;
         showToast(`Retrying... (${retryCount}/${maxRetries})`, "warning");
         
-        // Cleanup failed instance
         if (fm) {
           try {
             await fm.terminate?.();
-          } catch (e) {
-            // Ignore cleanup errors
-          }
+          } catch (e) {}
         }
         fm = null;
       } finally {
@@ -301,13 +348,13 @@ const MuxerModule = (() => {
     return null;
   }
 
-  // --- Public API with health check ---
+  // --- Health check ---
   async function healthCheck() {
     try {
-      const workingProvider = await findWorkingCDN();
+      const provider = await findWorkingCDN();
       return {
         status: 'healthy',
-        cdn: workingProvider.name,
+        cdn: provider.name,
         version: '0.12.10'
       };
     } catch (error) {
@@ -320,18 +367,19 @@ const MuxerModule = (() => {
 
   return { 
     mergeStreamsToBlob,
-    healthCheck 
+    healthCheck,
+    initFFmpegWithFallback
   };
 })();
 
-// --- Optional: Auto health check on page load ---
+// Auto health check
 if (typeof window !== 'undefined') {
   window.addEventListener('load', async () => {
     try {
       const health = await MuxerModule.healthCheck();
       console.log('Muxer Health Status:', health);
       if (health.status === 'unhealthy') {
-        console.warn('⚠️ No CDN available. Muxer may not work.');
+        console.warn('⚠️ No CDN available. Will try local fallback.');
       }
     } catch (e) {
       console.warn('Health check failed:', e);
