@@ -8,38 +8,38 @@ const MuxerModule = (() => {
     // FFmpeg is heavy. Use JSDelivr's optimized multi-threaded version
     // NOTE: This REQUIRES Cross-Origin Isolation (public/_headers) to load.
     async function loadFFmpeg() {
-        if (isLoaded) return ffmpeg;
-        if (loadPromise) return loadPromise;
-
-        showToast("Initial FFmpeg load... please wait", "warning");
-        
-        loadPromise = (async () => {
-            // FIX 1: Access modern UMD global 'window.FFmpegWasm' instead of 'window.FFmpeg'
-            if (!window.FFmpegWasm) {
-                throw new Error("FFmpeg script from CDN failed to initialize or is blocked.");
-            }
-            const { FFmpeg } = window.FFmpegWasm;
-
-            const corePath = 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.10/dist/umd/ffmpeg-core.js';
-            const wasmPath = 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.10/dist/umd/ffmpeg-core.wasm';
-            const workerPath = 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.10/dist/umd/ffmpeg-core.worker.js';
-
-            ffmpeg = new FFmpeg();
+            if (isLoaded) return ffmpeg;
+            if (loadPromise) return loadPromise;
+    
+            showToast("Initial FFmpeg load... please wait", "warning");
             
-            // Critical setup required for multi-threaded WASM version
-            await ffmpeg.load({
-                corePath: corePath,
-                wasmPath: wasmPath,
-                workerPath: workerPath,
-            });
-            
-            isLoaded = true;
-            loadPromise = null;
-            return ffmpeg;
-        })();
-
-        return loadPromise;
-    }
+            loadPromise = (async () => {
+                // FIX: Use exact capitalization 'FFmpegWASM' based on the CDN source code
+                if (!window.FFmpegWASM) {
+                    throw new Error("FFmpeg script from CDN failed to initialize or is blocked.");
+                }
+                const { FFmpeg } = window.FFmpegWASM;
+    
+                const corePath = 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.10/dist/umd/ffmpeg-core.js';
+                const wasmPath = 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.10/dist/umd/ffmpeg-core.wasm';
+                const workerPath = 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.10/dist/umd/ffmpeg-core.worker.js';
+    
+                ffmpeg = new FFmpeg();
+                
+                // Critical setup required for multi-threaded WASM version
+                await ffmpeg.load({
+                    corePath: corePath,
+                    wasmPath: wasmPath,
+                    workerPath: workerPath,
+                });
+                
+                isLoaded = true;
+                loadPromise = null;
+                return ffmpeg;
+            })();
+    
+            return loadPromise;
+        }
 
     // Main Muxing operation
     async function mergeStreamsToBlob(videoUrl, audioUrl, onProgress) {
