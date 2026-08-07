@@ -34,7 +34,7 @@ const MuxerModule = (() => {
                 const [coreURL, wasmURL, workerURL] = await Promise.all([
                     toBlobURL(`${FFMPEG_BASE_URL}/ffmpeg-core.js`, 'text/javascript'),
                     toBlobURL(`${FFMPEG_BASE_URL}/ffmpeg-core.wasm`, 'application/wasm'),
-                    toBlobURL(`${FFMPEG_BASE_URL}/ffmpeg-core.worker.js`, 'text/javascript'),
+                    toBlobURL(`https://cdnjs.cloudflare.com/ajax/libs/ffmpeg-core/0.8.5/ffmpeg-core.worker.js`, 'text/javascript'),
                 ]);
 
                 // --- Step C: Load the optimized WASM Core explicitly providing URLs ---
