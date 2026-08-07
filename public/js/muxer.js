@@ -7,7 +7,7 @@ const MuxerModule = (() => {
     let loadPromise = null;
 
     // 2. SELF-HOSTED PATHS - Pointing to Step 1 files
-    const FFMPEG_LIB_LOCAL_URL = '/assets/ffmpeg.js'; // The main ESM library
+    const FFMPEG_LIB_LOCAL_URL = 'https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.10/+esm'; // The main ESM library
     const FFMPEG_CORE_BASE_URL = 'https://app.unpkg.com/@ffmpeg/core@0.12.10/files/dist/umd/';       // Folder containing ffmpeg-core.js and .wasm
 
     // 3. Robust initialization module (Fixed Turn 26 for strict self-hosting)
