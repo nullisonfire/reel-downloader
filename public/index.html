@@ -53,9 +53,12 @@
                         <div class="stat"><span id="comment-count">0</span> Comments</div>
                     </div>
 
-                    <div class="action-buttons">
-                        <button id="download-btn" class="ripple-btn primary-btn">Download MP4</button>
-                        <button id="copy-link-btn" class="ripple-btn secondary-btn">Copy Link</button>
+                    <!-- public/index.html (Updated action-buttons div) -->
+                    <div class="action-buttons" style="display: flex; flex-direction: column; gap: 0.5rem;">
+                        <!-- Container where dynamic download buttons will be inserted -->
+                        <div id="download-buttons-container" style="display: flex; gap: 1rem; flex-wrap: wrap;"></div>
+                        
+                        <button id="copy-link-btn" class="ripple-btn secondary-btn" style="width: 100%;">Copy Link</button>
                     </div>
                 </div>
             </div>
